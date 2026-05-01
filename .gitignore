@@ -216,3 +216,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ANSYS Workbench project files
+1_files/
+*.wbpj
+*.dsco
+*.mshdb
+*.wbdp
+*.wbjn
+
+# Word documents — source report not for public repo
+*.doc
+*.docx
+
+# Downloaded stock images
+*.jpeg
+
+# macOS
+.DS_Store
