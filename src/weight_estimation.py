@@ -3,13 +3,18 @@ weight_estimation.py
 --------------------
 Wing mass breakdown estimation for the hybrid VTOL platform.
 
-Estimates mass contributions from structural materials, propulsion,
-control surfaces, and avionics across multiple design datasets.
-Total estimated wing mass is printed and a breakdown chart saved.
+Estimates mass contributions from structural spar, skin, propulsion,
+control surfaces, and avionics. Two spar materials compared:
+  - Al 7075-T6  (density 2810 kg/m^3)
+  - CFRP        (density 1600 kg/m^3)
+
+Structural mass model (thin-walled box spar approximation):
+    m_spar = rho_mat * b * c * t_skin * perimeter_factor
+where b = semi-span, c = mean chord, t_skin = skin thickness.
 
 Inputs : data/Weight_Analysis_data.csv
 Outputs: results/weight_distribution.png
-         results/weight_breakdown_bar.png
+         results/weight_breakdown_pie.png
 
 Usage:
     python src/weight_estimation.py
@@ -21,51 +26,67 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-GRAVITY     = 9.81
-RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
-DATA_PATH   = os.path.join(os.path.dirname(__file__), "..", "data",
-                           "Weight_Analysis_data.csv")
+GRAVITY       = 9.81
+ASPECT_RATIO  = 6.0        # Wing AR — used to derive semi-span from area
+SPAR_PERIMETER_FACTOR = 2.4  # Approximate box-spar cross-section perimeter / chord
+PROPULSION_SPECIFIC_MASS = 0.005  # kg/W — modern brushless motor empirical ratio
+RESULTS_DIR   = os.path.join(os.path.dirname(__file__), "..", "results")
+DATA_PATH     = os.path.join(os.path.dirname(__file__), "..", "data",
+                             "Weight_Analysis_data.csv")
+
 
 # ── Functions ─────────────────────────────────────────────────────────────────
 
-def estimate_structural_mass(wing_area, wing_loading, material_density):
-    """Structural mass from wing area, loading, and material density (kg)."""
-    return wing_area * wing_loading / GRAVITY * material_density
+def spar_mass(wing_area_m2, skin_thickness_mm, density_kgm3,
+              AR=ASPECT_RATIO, pf=SPAR_PERIMETER_FACTOR):
+    """
+    Thin-walled box spar + skin mass (kg).
+    Semi-span  b  = sqrt(AR * S) / 2
+    Mean chord c  = sqrt(S / AR)
+    Volume ≈ b * c * t_skin * perimeter_factor
+    """
+    t_m       = skin_thickness_mm / 1000.0
+    semi_span = np.sqrt(AR * wing_area_m2) / 2.0
+    chord     = np.sqrt(wing_area_m2 / AR)
+    volume    = semi_span * chord * t_m * pf
+    return density_kgm3 * volume
 
 
-def estimate_propulsion_mass(propulsion_power):
-    """Propulsion system mass — empirical ratio: 0.1 kg/W (kg)."""
-    return 0.1 * propulsion_power
+def propulsion_mass(power_w, specific_mass=PROPULSION_SPECIFIC_MASS):
+    """Propulsion system mass (kg) — motor + ESC empirical ratio."""
+    return specific_mass * power_w
 
 
-def estimate_control_surface_mass(area, density):
-    """Control surface mass from area and surface density (kg)."""
-    return area * density
+def control_surface_mass(area_m2, surface_density_kgm2=1.8):
+    """
+    Control surface mass (kg).
+    Typical CFRP control surface: ~1.8 kg/m^2 areal density.
+    """
+    return area_m2 * surface_density_kgm2
 
 
 def build_mass_breakdown(data):
     """Return DataFrame with per-row mass components and totals."""
     df = data.copy()
-    df["mass_structural"]  = estimate_structural_mass(
-        df["Wing_Area"], df["Wing_Loading"], df["Material_Density"])
-    df["mass_propulsion"]  = estimate_propulsion_mass(df["Propulsion_Power"])
-    df["mass_controls"]    = estimate_control_surface_mass(
-        df["Control_Surface_Area"], df["Control_Surface_Density"])
-    df["mass_electronics"] = df["Electronics_Weight"]
-    df["mass_total"]       = (df["mass_structural"] + df["mass_propulsion"]
-                               + df["mass_controls"] + df["mass_electronics"])
+    df["mass_spar_kg"]        = spar_mass(
+        df["Wing_Area_m2"], df["Skin_Thickness_mm"], df["Spar_Density_kgm3"])
+    df["mass_propulsion_kg"]  = propulsion_mass(df["Propulsion_Power_W"])
+    df["mass_controls_kg"]    = control_surface_mass(df["Control_Surface_Area_m2"])
+    df["mass_electronics_kg"] = df["Electronics_Weight_kg"]
+    df["mass_total_kg"]       = (df["mass_spar_kg"] + df["mass_propulsion_kg"]
+                                  + df["mass_controls_kg"] + df["mass_electronics_kg"])
     return df
 
 
 def plot_weight_distribution(df, output_path):
-    """Stacked bar chart showing mass breakdown per design dataset row."""
-    components = ["mass_structural", "mass_propulsion",
-                  "mass_controls",   "mass_electronics"]
-    labels     = ["Structural", "Propulsion", "Controls", "Electronics"]
+    """Stacked bar chart — mass breakdown per design variant."""
+    components = ["mass_spar_kg", "mass_propulsion_kg",
+                  "mass_controls_kg", "mass_electronics_kg"]
+    labels     = ["Spar + Skin", "Propulsion", "Control Surfaces", "Electronics"]
     colors     = ["#378ADD", "#1D9E75", "#D85A30", "#7F77DD"]
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    x = np.arange(len(df))
+    fig, ax = plt.subplots(figsize=(12, 6))
+    x      = np.arange(len(df))
     bottom = np.zeros(len(df))
 
     for comp, label, color in zip(components, labels, colors):
@@ -74,18 +95,23 @@ def plot_weight_distribution(df, output_path):
                width=0.6, edgecolor="white")
         bottom += vals
 
-    ax.set_xlabel("Design Dataset (row index)", fontsize=11)
-    ax.set_ylabel("Mass (kg)", fontsize=11)
-    ax.set_title("Wing Mass Breakdown by Component\nHybrid VTOL Platform",
-                 fontsize=13, fontweight="bold")
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"Dataset {i+1}" for i in x])
-    ax.legend(loc="upper right", fontsize=10)
-    ax.grid(axis="y", alpha=0.3)
+    # Annotate totals
+    for i, (total, mat) in enumerate(zip(df["mass_total_kg"], df["Spar_Material"])):
+        ax.text(i, total + 0.02, f"{total:.2f} kg\n({mat})",
+                ha="center", va="bottom", fontsize=8, fontweight="bold")
 
-    for i, total in enumerate(df["mass_total"]):
-        ax.text(i, total + total * 0.01, f"{total:.0f} kg",
-                ha="center", va="bottom", fontsize=9, fontweight="bold")
+    ax.set_xlabel("Design Variant", fontsize=11)
+    ax.set_ylabel("Mass (kg)", fontsize=11)
+    ax.set_title(
+        "Wing Mass Breakdown by Component — Hybrid VTOL Platform\n"
+        "Al 7075-T6 vs CFRP Spar Comparison",
+        fontsize=12, fontweight="bold"
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"DS{i+1}" for i in x], fontsize=9)
+    ax.legend(loc="upper left", fontsize=10)
+    ax.grid(axis="y", alpha=0.3)
+    ax.set_facecolor("#FAFAFA")
 
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
@@ -94,14 +120,14 @@ def plot_weight_distribution(df, output_path):
 
 
 def plot_average_breakdown(df, output_path):
-    """Pie chart of average mass breakdown across all datasets."""
-    components = ["mass_structural", "mass_propulsion",
-                  "mass_controls",   "mass_electronics"]
-    labels     = ["Structural", "Propulsion", "Controls", "Electronics"]
+    """Pie chart of mean mass breakdown across all variants."""
+    components = ["mass_spar_kg", "mass_propulsion_kg",
+                  "mass_controls_kg", "mass_electronics_kg"]
+    labels     = ["Spar + Skin", "Propulsion", "Control Surfaces", "Electronics"]
     colors     = ["#378ADD", "#1D9E75", "#D85A30", "#7F77DD"]
     means      = [df[c].mean() for c in components]
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(7, 6))
     wedges, texts, autotexts = ax.pie(
         means, labels=labels, colors=colors,
         autopct="%1.1f%%", startangle=90,
@@ -112,7 +138,7 @@ def plot_average_breakdown(df, output_path):
         at.set_fontweight("bold")
 
     ax.set_title(
-        f"Average Wing Mass Distribution\nTotal: {sum(means):.1f} kg",
+        f"Mean Wing Mass Distribution\nTotal: {sum(means):.2f} kg",
         fontsize=13, fontweight="bold"
     )
     plt.tight_layout()
@@ -129,21 +155,28 @@ def main():
     data = pd.read_csv(DATA_PATH)
     df   = build_mass_breakdown(data)
 
-    print("Weight Estimation Results:")
+    print("Weight Estimation Results  (wing structure only):")
+    print(f"\n  {'DS':<5} {'Material':<8} {'Spar+Skin':>10} "
+          f"{'Propulsion':>11} {'Controls':>9} {'Avionics':>9} {'TOTAL':>8}")
+    print("  " + "─" * 62)
     for i, row in df.iterrows():
-        print(f"\n  Dataset {i+1}:")
-        print(f"    Structural  : {row['mass_structural']:.1f} kg")
-        print(f"    Propulsion  : {row['mass_propulsion']:.1f} kg")
-        print(f"    Controls    : {row['mass_controls']:.1f} kg")
-        print(f"    Electronics : {row['mass_electronics']:.1f} kg")
-        print(f"    TOTAL       : {row['mass_total']:.1f} kg")
+        print(f"  {i+1:<5} {row['Spar_Material']:<8} "
+              f"{row['mass_spar_kg']:>9.3f}  "
+              f"{row['mass_propulsion_kg']:>10.3f}  "
+              f"{row['mass_controls_kg']:>8.3f}  "
+              f"{row['mass_electronics_kg']:>8.3f}  "
+              f"{row['mass_total_kg']:>7.3f} kg")
 
-    print(f"\n  Mean total mass across all datasets: {df['mass_total'].mean():.1f} kg")
+    al_mean   = df[df["Spar_Material"] == "Al7075"]["mass_total_kg"].mean()
+    cfrp_mean = df[df["Spar_Material"] == "CFRP"]["mass_total_kg"].mean()
+    saving    = (al_mean - cfrp_mean) / al_mean * 100
 
-    plot_weight_distribution(
-        df, os.path.join(RESULTS_DIR, "weight_distribution.png"))
-    plot_average_breakdown(
-        df, os.path.join(RESULTS_DIR, "weight_breakdown_pie.png"))
+    print(f"\n  Al 7075 mean total  : {al_mean:.3f} kg")
+    print(f"  CFRP mean total     : {cfrp_mean:.3f} kg")
+    print(f"  CFRP mass saving    : {saving:.1f}%")
+
+    plot_weight_distribution(df, os.path.join(RESULTS_DIR, "weight_distribution.png"))
+    plot_average_breakdown(df, os.path.join(RESULTS_DIR, "weight_breakdown_pie.png"))
 
     print("\nWeight estimation complete.")
 
