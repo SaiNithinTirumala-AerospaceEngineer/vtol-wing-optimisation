@@ -24,10 +24,12 @@ import matplotlib.pyplot as plt
 # ── Constants ────────────────────────────────────────────────────────────────
 RHO = 1.225          # Air density at sea level, kg/m^3
 WING_AREA = 0.48     # Reference wing area, m^2
+# Cl and Cd at cruise AoA = 4°, Re ≈ 500,000
+# Source: NACA Technical Report 824 (Abbott & Von Doenhoff, 1959)
 AIRFOIL_LABELS = {
-    "NACA 0012": {"Cl": 0.95, "Cd": 0.018, "color": "#378ADD"},
-    "NACA 2415": {"Cl": 1.10, "Cd": 0.022, "color": "#1D9E75"},
-    "NACA 4412": {"Cl": 1.25, "Cd": 0.028, "color": "#D85A30"},
+    "NACA 0012": {"Cl": 0.430, "Cd": 0.0098, "color": "#378ADD"},
+    "NACA 2415": {"Cl": 0.620, "Cd": 0.0112, "color": "#1D9E75"},
+    "NACA 4412": {"Cl": 0.820, "Cd": 0.0148, "color": "#D85A30"},
 }
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
 DATA_PATH   = os.path.join(os.path.dirname(__file__), "..", "data", "Lift_Drag_data.csv")
@@ -111,10 +113,10 @@ def main():
     # Load CSV — use for airspeed range
     data = pd.read_csv(DATA_PATH)
     airspeeds = np.linspace(
-        float(data["Airspeed"].min()),
-        float(data["Airspeed"].max()),
-        100
-    )
+    float(data["Airspeed_ms"].min()),
+    float(data["Airspeed_ms"].max()),
+    100
+)
 
     # Compute lift and drag for each airfoil profile
     results = {}
