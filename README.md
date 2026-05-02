@@ -24,9 +24,9 @@ configuration using six purpose-built Python analysis modules.
 
 | Airfoil   | Location  | Role                                         | Cruise L/D at 4° AoA |
 |-----------|-----------|----------------------------------------------|----------------------|
-| NACA 0012 | Root      | Symmetric — predictable hover behaviour      | 43.9                 |
-| NACA 2415 | Mid-span  | Cambered — cruise lift-to-drag balance       | 62.5                 |
-| NACA 4412 | Tip       | High camber — low-speed lift augmentation    | 60.1                 |
+| NACA 0012 | Root      | Symmetric — predictable hover behaviour      | 53.5                 |
+| NACA 2415 | Mid-span  | Cambered — cruise lift-to-drag balance       | 77.6                 |
+| NACA 4412 | Tip       | High camber — low-speed lift augmentation    | 102.5                |
 
 *Polar data source: NACA Technical Report 824 (Abbott & Von Doenhoff, 1959),
 Re = 500,000, ISA sea-level conditions.*
@@ -126,11 +126,13 @@ at Re = 500,000, AoA = 4°:
 
 | Metric             | This work | NACA TR 824 | Error  |
 |--------------------|-----------|-------------|--------|
-| NACA 0012 Cl @ 4°  | 0.430     | 0.431       | −0.2%  |
-| NACA 0012 Cd @ 4°  | 0.0098    | 0.0096      | +2.1%  |
-| NACA 0012 L/D      | 43.9      | 44.9        | −2.2%  |
-| NACA 2415 Cl @ 4°  | 0.700     | 0.695       | +0.7%  |
-| NACA 4412 Cl @ 4°  | 0.890     | 0.882       | +0.9%  |
+| NACA 0012 Cl @ 4°  | 0.480     | 0.431       | +11.4% |
+| NACA 0012 Cd @ 4°  | 0.00898   | 0.00960     | −6.5%  |
+| NACA 0012 L/D      | 53.5      | 44.9        | +19.2% |
+| NACA 2415 Cl @ 4°  | 0.710     | 0.695       | +2.2%  |
+| NACA 4412 Cl @ 4°  | 0.906     | 0.882       | +2.7%  |
+
+*NACA 0012 L/D discrepancy vs TR 824 is expected — XFLR5 uses a free-transition model (Ncrit=9) which delays transition and reduces Cd, inflating L/D vs tunnel data. This is noted in the limitations section.
 
 *Structural safety factor cross-checked against hand calculation using
 CS-23 AMC 23.331 load distribution method — within 3% of Python output.*
